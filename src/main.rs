@@ -4,6 +4,7 @@ use std::path::Path;
 
 use downloader::Downloader;
 use downloader::Error;
+use url::Url;
 
 // Define a custom progress reporter:
 struct SimpleReporterPrivate {
@@ -89,32 +90,17 @@ fn main() {
     };
     let doc = roxmltree::Document::parse_with_options(&text, opt).unwrap();
     for node in doc.descendants() {
-        if node.is_element() && node.tag_name().name() == "track" {
-            let mut location = None;
-            let mut title = None;
-            for node in node.children() {
-                if node.tag_name().name() == args[2] {
-                    location = node.text();
-                }
-                if node.tag_name().name() == "title" {
-                    title = node.text();
-                }
-            }
+        if node.is_element() && node.tag_name().name() == args[2] {
+            if let Some(location) = node.text() {
+                if let Ok(url) = Url::parse(location) {
+                    let filename = url.path_segments().unwrap().last().unwrap();
 
-            match (location, title) {
-                (Some(location), Some(title)) => {
-                    // this only downloads files if they do not exist
-                    dls.push(downloader::Download::new(location)
-                        .file_name(Path::new(title))
-                        .progress(SimpleReporter::create()));
-                },
-                (Some(location), None) => {
-                    // this only downloads files if they do not exist
-                    dls.push(downloader::Download::new(location)
-                        .progress(SimpleReporter::create()));
-                },
-
-                _ => {},
+                    if !Path::new("output").join(filename).exists() {
+                        dls.push(downloader::Download::new(location)
+                            .file_name(Path::new(filename))
+                            .progress(SimpleReporter::create()));
+                    }
+                }
             }
         }
     }

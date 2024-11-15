@@ -6,3 +6,4 @@ edition = "2021"
 [dependencies]
 downloader = "0.2.8"
 roxmltree = "0.20.0"
+url = "2.5.3"
