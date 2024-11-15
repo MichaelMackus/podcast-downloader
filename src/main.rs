@@ -2,6 +2,7 @@ use std::io;
 use std::fs::File;
 use std::path::Path;
 
+use roxmltree::Node;
 use downloader::Downloader;
 use downloader::Error;
 use url::Url;
@@ -67,6 +68,16 @@ impl downloader::progress::Reporter for SimpleReporter {
 const THREADS: u16 = 8;
 const RETRIES: u16 = 3;
 
+fn node_url(node: Node) -> Option<Url> {
+    if let Some(text) = node.text() {
+        Url::parse(text).ok()
+    } else if let Some(text) = node.attribute("url") {
+        Url::parse(text).ok()
+    } else {
+        None
+    }
+}
+
 fn main() {
     let args: Vec<_> = std::env::args().collect();
 
@@ -83,24 +94,21 @@ fn main() {
         .unwrap();
     let mut dls = vec![];
 
-    let text = std::fs::read_to_string(&args[1]).unwrap();
+    let text = std::fs::read_to_string(&args[1]).expect("Unable to read input XML file");
     let opt = roxmltree::ParsingOptions {
         allow_dtd: true,
         ..roxmltree::ParsingOptions::default()
     };
-    let doc = roxmltree::Document::parse_with_options(&text, opt).unwrap();
+    let doc = roxmltree::Document::parse_with_options(&text, opt).expect("Unable to parse input XML file");
     for node in doc.descendants() {
         if node.is_element() && node.tag_name().name() == args[2] {
-            if let Some(location) = node.text() {
-                if let Ok(url) = Url::parse(location) {
-                    let filename = url.path_segments().unwrap().last().unwrap();
+            let url = node_url(node).expect("Error parsing URL from podcast XML element");
+            let filename = url.path_segments().expect("Error parsing URL").last().expect("Error parsing URL");
 
-                    if !Path::new("output").join(filename).exists() {
-                        dls.push(downloader::Download::new(location)
-                            .file_name(Path::new(filename))
-                            .progress(SimpleReporter::create()));
-                    }
-                }
+            if !Path::new("output").join(filename).exists() {
+                dls.push(downloader::Download::new(url.as_str())
+                    .file_name(Path::new(filename))
+                    .progress(SimpleReporter::create()));
             }
         }
     }
